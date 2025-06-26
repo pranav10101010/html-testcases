@@ -1,0 +1,17 @@
+name: Test and Show HTML Report in Logs
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - name: Convert HTML to text and display in log
+        run: |
+          sudo apt-get update && sudo apt-get install -y w3m
+          echo "========== Test Report =========="
+          w3m -dump ./COM_ABS_full_report.html
