@@ -1,10 +1,10 @@
-name: Test and Show HTML Report in Logs
+name: Test and Post Pretty HTML Report in PR
 
 on:
-  pull_request:       # Trigger on PRs
+  pull_request:
     branches: [ main ]
   push:
-    branches: [ main ]  # Optional: keep push if you want logs in main too
+    branches: [ main ]
 
 permissions:
   contents: read
@@ -23,24 +23,38 @@ jobs:
         run: |
           sudo apt-get update && sudo apt-get install -y w3m
           w3m -dump ./full_status.html > full_status.txt
-          cat full_status.txt
 
-      - name: Read full_status.txt
-        id: read_report
+      - name: Prepare Pretty Markdown Table
+        id: md_table
         run: |
-          REPORT=$(cat full_status.txt)
-          echo "report<<EOF" >> $GITHUB_OUTPUT
-          echo "$REPORT" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          echo "## 🧪 Test Report" >> table.md
+          echo "| Module | Status | Build Time | Testcases | Execute | Statements | Branches |" >> table.md
+          echo "|--------|--------|------------|-----------|---------|------------|---------|" >> table.md
 
-      - name: Post Full Status as PR Comment
+          awk '
+            NF>=7 {
+              # Module name = all fields except last 6
+              module=$1
+              for(i=2;i<=NF-6;i++){module=module" "$i}
+              
+              # Status: NORMAL/100% -> ✅, others -> ❌
+              status=$2
+              if(status ~ /100%|NORMAL/) {icon="✅"} else {icon="❌"}
+              
+              # Print row
+              printf "| %s | %s %s | %s | %s | %s | %s | %s |\n", module, icon, status, $(NF-5), $(NF-4), $(NF-3), $(NF-2), $NF
+            }
+          ' full_status.txt >> table.md
+
+          # Save table in env to post as PR comment
+          echo "md_table<<EOF" >> $GITHUB_ENV
+          cat table.md >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+
+      - name: Post Pretty PR Comment
         if: github.event_name == 'pull_request'
         uses: peter-evans/create-or-update-comment@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           issue-number: ${{ github.event.pull_request.number }}
-          body: |
-            ## Full Status Report
-            ```
-            ${{ steps.read_report.outputs.report }}
-            ```
+          body: ${{ env.md_table }}
