@@ -4,6 +4,11 @@ on:
   push:
     branches: [ main ]
 
+permissions:
+  contents: read
+  checks: write   # 👈 required to publish test results
+  pull-requests: write
+
 jobs:
   report:
     runs-on: ubuntu-latest
@@ -26,13 +31,8 @@ jobs:
           python <<'EOF'
           import json
           from bs4 import BeautifulSoup
-          from pathlib import Path
 
-          html_file = Path("full_status.html")
-          if not html_file.exists():
-              raise FileNotFoundError("full_status.html not found at repo root")
-
-          with open(html_file) as f:
+          with open("full_status.html") as f:
               soup = BeautifulSoup(f, "html.parser")
 
           results = []
