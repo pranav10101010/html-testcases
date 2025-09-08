@@ -6,7 +6,6 @@ on:
   push:
     branches: [ main ]  # Optional: keep push if you want logs in main too
 
-
 permissions:
   contents: read
   checks: write
@@ -26,6 +25,14 @@ jobs:
           w3m -dump ./full_status.html > full_status.txt
           cat full_status.txt
 
+      - name: Read full_status.txt
+        id: read_report
+        run: |
+          REPORT=$(cat full_status.txt)
+          echo "report<<EOF" >> $GITHUB_OUTPUT
+          echo "$REPORT" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
       - name: Post Full Status as PR Comment
         if: github.event_name == 'pull_request'
         uses: peter-evans/create-or-update-comment@v4
@@ -35,5 +42,5 @@ jobs:
           body: |
             ## Full Status Report
             ```
-            $(cat full_status.txt)
+            ${{ steps.read_report.outputs.report }}
             ```
