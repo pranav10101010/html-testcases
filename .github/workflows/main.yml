@@ -16,4 +16,4 @@ jobs:
         run: |
           sudo apt-get update && sudo apt-get install -y w3m
           echo "========== Test Report =========="
-          w3m -dump ./COM_ABS_full_report.html
+          w3m -dump ./full_status.html
