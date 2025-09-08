@@ -1,8 +1,10 @@
 name: Test and Show HTML Report in Logs
 
 on:
-  push:
+  pull_request:       # Trigger on PRs
     branches: [ main ]
+  push:
+    branches: [ main ]  # Optional: keep push if you want logs in main too
 
 jobs:
   test:
@@ -12,15 +14,20 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      # - name: Convert HTML to text and display in log
-      #   run: |
-      #     sudo apt-get update && sudo apt-get install -y w3m
-      #     echo "========== Test Report =========="
-      #     w3m -dump ./full_status.html
+      - name: Convert HTML to text
+        run: |
+          sudo apt-get update && sudo apt-get install -y w3m
+          w3m -dump ./full_status.html > full_status.txt
+          cat full_status.txt
 
-      - name: HTML Preview
-        id: html_preview
-        uses: pavi2410/html-preview-action@v4
+      - name: Post Full Status as PR Comment
+        if: github.event_name == 'pull_request'
+        uses: peter-evans/create-or-update-comment@v4
         with:
-          html_file: './full_status.html'
-          job_summary: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+          issue-number: ${{ github.event.pull_request.number }}
+          body: |
+            ## Full Status Report
+            ```
+            $(cat full_status.txt)
+            ```
