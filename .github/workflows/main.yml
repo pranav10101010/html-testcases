@@ -6,6 +6,12 @@ on:
   push:
     branches: [ main ]  # Optional: keep push if you want logs in main too
 
+
+permissions:
+  contents: read
+  checks: write
+  pull-requests: write
+
 jobs:
   test:
     runs-on: ubuntu-latest
