@@ -1,13 +1,8 @@
-name: Convert and Publish Reports
+name: Convert HTML Report to JUnit XML
 
 on:
   push:
     branches: [ main ]
-
-permissions:
-  contents: read
-  checks: write   # 👈 required to publish test results
-  pull-requests: write
 
 jobs:
   report:
@@ -25,49 +20,32 @@ jobs:
       - name: Install dependencies
         run: pip install beautifulsoup4
 
-      - name: Convert HTML to JSON
+      - name: Convert HTML to JUnit XML
         run: |
           mkdir -p test-results
           python <<'EOF'
-          import json
           from bs4 import BeautifulSoup
 
           with open("full_status.html") as f:
               soup = BeautifulSoup(f, "html.parser")
 
-          results = []
-          for row in soup.find_all("tr"):
-              cols = [td.get_text(strip=True) for td in row.find_all("td")]
-              if not cols:
-                  continue
-              results.append({
-                  "test": cols[0],
-                  "status": cols[1] if len(cols) > 1 else "passed"
-              })
-
-          with open("test-results/report.json", "w") as f:
-              json.dump(results, f, indent=2)
-          EOF
-
-      - name: Convert JSON to JUnit XML
-        run: |
-          python <<'EOF'
-          import json
-
-          with open("test-results/report.json") as f:
-              results = json.load(f)
-
           with open("test-results/report.xml", "w") as f:
               f.write('<testsuites>\n')
-              f.write('  <testsuite name="HTML Report">\n')
+              f.write('  <testsuite name="VectorCAST Results">\n')
 
-              for test in results:
-                  name = test["test"]
-                  status = test["status"].lower()
-                  if status == "failed":
-                      f.write(f'    <testcase name="{name}"><failure message="Failed"/></testcase>\n')
-                  else:
-                      f.write(f'    <testcase name="{name}"/>\n')
+              # Assumption: first <td> = test name, second <td> = status
+              for row in soup.find_all("tr"):
+                  cols = [td.get_text(strip=True) for td in row.find_all("td")]
+                  if len(cols) >= 2:
+                      test_name = cols[0]
+                      status_text = cols[1].lower()
+
+                      if status_text in ["pass", "passed", "success"]:
+                          f.write(f'    <testcase name="{test_name}"/>\n')
+                      elif status_text in ["fail", "failed", "error"]:
+                          f.write(f'    <testcase name="{test_name}"><failure message="Failed"/></testcase>\n')
+                      else:
+                          f.write(f'    <testcase name="{test_name}"><skipped/></testcase>\n')
 
               f.write('  </testsuite>\n')
               f.write('</testsuites>\n')
