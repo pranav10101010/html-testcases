@@ -12,8 +12,15 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      - name: Convert HTML to text and display in log
-        run: |
-          sudo apt-get update && sudo apt-get install -y w3m
-          echo "========== Test Report =========="
-          w3m -dump ./full_status.html
+      # - name: Convert HTML to text and display in log
+      #   run: |
+      #     sudo apt-get update && sudo apt-get install -y w3m
+      #     echo "========== Test Report =========="
+      #     w3m -dump ./full_status.html
+
+      - name: HTML Preview
+        id: html_preview
+        uses: pavi2410/html-preview-action@v4
+        with:
+          html_file: 'full_status.html'
+          job_summary: true
