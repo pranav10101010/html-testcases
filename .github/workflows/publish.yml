@@ -5,8 +5,9 @@ on:
     branches: [ main ]
 
 permissions:
-  checks: write
   contents: read
+  checks: write
+  pull-requests: write
 
 jobs:
   convert:
