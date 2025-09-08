@@ -1,63 +1,90 @@
-name: Convert HTML Report to JUnit XML
+name: Convert HTML Report to JUnit
 
 on:
-  push:
-    branches: [ main ]
-
-permissions:
-  contents: read
-  checks: write
-  pull-requests: write
+  workflow_dispatch:   # run manually, you can also add `push` if you want
 
 jobs:
-  report:
+  convert:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
+      - uses: actions/setup-python@v5
         with:
-          python-version: "3.x"
+          python-version: '3.x'
 
-      - name: Install dependencies
-        run: pip install beautifulsoup4
+      - run: pip install beautifulsoup4 lxml
 
       - name: Convert HTML to JUnit XML
         run: |
-          mkdir -p test-results
           python <<'EOF'
+          import xml.etree.ElementTree as ET
           from bs4 import BeautifulSoup
 
-          with open("full_status.html") as f:
+          def parse_time(s):
+              if not s or s.strip() in ["-", "NONE_SET"]:
+                  return "0"
+              parts = s.split(":")
+              if len(parts) == 2:
+                  m, s = parts
+                  return str(int(m) * 60 + int(s))
+              elif len(parts) == 3:
+                  h, m, s = parts
+                  return str(int(h) * 3600 + int(m) * 60 + int(s))
+              return "0"
+
+          with open("full_status.html", "r", encoding="utf-8") as f:
               soup = BeautifulSoup(f, "html.parser")
 
-          with open("test-results/report.xml", "w") as f:
-              f.write('<testsuites>\n')
-              f.write('  <testsuite name="VectorCAST Results">\n')
+          testsuites = ET.Element("testsuites")
 
-              for row in soup.find_all("tr"):
-                  cols = [td.get_text(strip=True) for td in row.find_all("td")]
-                  if len(cols) >= 2:
-                      test_name = cols[0]
-                      status_text = cols[1].lower()
+          for row in soup.find_all("tr"):
+              cols = [c.get_text(strip=True) for c in row.find_all("td")]
+              if not cols or len(cols) < 2:
+                  continue
 
-                      if status_text in ["pass", "passed", "success"]:
-                          f.write(f'    <testcase name="{test_name}"/>\n')
-                      elif status_text in ["fail", "failed", "error"]:
-                          f.write(f'    <testcase name="{test_name}"><failure message="Failed"/></testcase>\n')
-                      else:
-                          f.write(f'    <testcase name="{test_name}"><skipped/></testcase>\n')
+              name = cols[0]
 
-              f.write('  </testsuite>\n')
-              f.write('</testsuites>\n')
+              # NONE_SET → skipped
+              if cols[1] == "NONE_SET":
+                  ET.SubElement(
+                      testsuites,
+                      "testsuite",
+                      name=name,
+                      tests="0",
+                      failures="0",
+                      skipped="1",
+                      time="0"
+                  )
+                  continue
+
+              # Parse x/y
+              total, passed = 0, 0
+              build_status = cols[1]
+              if "/" in build_status:
+                  left, right = build_status.split("/")
+                  passed = int(left)
+                  total = int(right.split()[0])
+
+              failures = total - passed if total > 0 else 0
+              skipped = 0
+              duration = parse_time(cols[2]) if len(cols) > 2 else "0"
+
+              ET.SubElement(
+                  testsuites,
+                  "testsuite",
+                  name=name,
+                  tests=str(total),
+                  failures=str(failures),
+                  skipped=str(skipped),
+                  time=duration
+              )
+
+          ET.ElementTree(testsuites).write("report.xml", encoding="utf-8", xml_declaration=True)
           EOF
 
       - name: Publish Test Results
         uses: EnricoMi/publish-unit-test-result-action@v2
-        if: ${{ !cancelled() }}
+        if: always()
         with:
-          files: |
-            test-results/**/*.xml
+          files: report.xml
