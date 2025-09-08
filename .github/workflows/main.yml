@@ -22,5 +22,5 @@ jobs:
         id: html_preview
         uses: pavi2410/html-preview-action@v4
         with:
-          html_file: 'full_status.html'
+          html_file: './full_status.html'
           job_summary: true
