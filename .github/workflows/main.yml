@@ -19,36 +19,22 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      - name: Convert HTML to text
+      # Optional: clean up the HTML if needed
+      - name: Extract only the table section
         run: |
-          sudo apt-get update && sudo apt-get install -y w3m
-          w3m -dump ./full_status.html > full_status.txt
+          # If full_status.html already has just the report, you can skip this step
+          # Otherwise, extract only the <table>...</table> part
+          sed -n '/<table/,/<\/table>/p' full_status.html > report_table.html
 
-      - name: Prepare Pretty Markdown Table
-        id: md_table
+      - name: Prepare HTML for PR comment
         run: |
-          echo "## 🧪 Test Report" >> table.md
-          echo "| Module | Status | Build Time | Testcases | Execute | Statements | Branches |" >> table.md
-          echo "|--------|--------|------------|-----------|---------|------------|---------|" >> table.md
+          echo "## 🧪 Test Report" > comment.md
+          echo "<details><summary>Show Report</summary>" >> comment.md
+          cat report_table.html >> comment.md
+          echo "</details>" >> comment.md
 
-          awk '
-            NF>=7 {
-              # Module name = all fields except last 6
-              module=$1
-              for(i=2;i<=NF-6;i++){module=module" "$i}
-              
-              # Status: NORMAL/100% -> ✅, others -> ❌
-              status=$2
-              if(status ~ /100%|NORMAL/) {icon="✅"} else {icon="❌"}
-              
-              # Print row
-              printf "| %s | %s %s | %s | %s | %s | %s | %s |\n", module, icon, status, $(NF-5), $(NF-4), $(NF-3), $(NF-2), $NF
-            }
-          ' full_status.txt >> table.md
-
-          # Save table in env to post as PR comment
-          echo "md_table<<EOF" >> $GITHUB_ENV
-          cat table.md >> $GITHUB_ENV
+          echo "PR_COMMENT<<EOF" >> $GITHUB_ENV
+          cat comment.md >> $GITHUB_ENV
           echo "EOF" >> $GITHUB_ENV
 
       - name: Post Pretty PR Comment
@@ -57,4 +43,4 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           issue-number: ${{ github.event.pull_request.number }}
-          body: ${{ env.md_table }}
+          body: ${{ env.PR_COMMENT }}
