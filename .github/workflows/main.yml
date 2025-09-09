@@ -1,4 +1,4 @@
-name: Test and Show HTML Report in PR
+name: Test and Post Pretty HTML Report in PR
 
 on:
   pull_request:
@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: read
+  checks: write
   pull-requests: write
 
 jobs:
@@ -22,55 +23,38 @@ jobs:
         run: |
           sudo apt-get update && sudo apt-get install -y w3m
           w3m -dump ./full_status.html > full_status.txt
-          cat full_status.txt
 
-      - name: Generate PR Comment
-        if: github.event_name == 'pull_request'
+      - name: Prepare Pretty Markdown Table
+        id: md_table
         run: |
-          # Start comment
-          echo "## 🧪 Test Report" > comment.md
-
-          # Add Configuration Data in collapsible section
-          echo "<details><summary>Configuration Data</summary>" >> comment.md
-          awk '/Date of Report Creation/,/Full Status Section/' full_status.txt >> comment.md
-          echo "</details>" >> comment.md
-          echo "" >> comment.md
-
-          # Add Full Status Section as a markdown table
-          echo "| Module | Status | Build Time | Testcases | Execute | Statements | Branches |" >> comment.md
-          echo "|--------|--------|------------|-----------|---------|------------|---------|" >> comment.md
+          echo "## 🧪 Test Report" >> table.md
+          echo "| Module | Status | Build Time | Testcases | Execute | Statements | Branches |" >> table.md
+          echo "|--------|--------|------------|-----------|---------|------------|---------|" >> table.md
 
           awk '
-          BEGIN {section=0}
-          /Full Status Section/ {section=1; next}
-          section==1 && NF>1 {
+            NF>=7 {
+              # Module name = all fields except last 6
               module=$1
-              for(i=2;i<=NF-6 && i<=NF; i++){module=module" "$i}
+              for(i=2;i<=NF-6;i++){module=module" "$i}
+              
+              # Status: NORMAL/100% -> ✅, others -> ❌
+              status=$2
+              if(status ~ /100%|NORMAL/) {icon="✅"} else {icon="❌"}
+              
+              # Print row
+              printf "| %s | %s %s | %s | %s | %s | %s | %s |\n", module, icon, status, $(NF-5), $(NF-4), $(NF-3), $(NF-2), $NF
+            }
+          ' full_status.txt >> table.md
 
-              # Safely assign values if enough fields exist
-              bt = (NF-5>0 ? $(NF-5) : "-")
-              tc = (NF-4>0 ? $(NF-4) : "-")
-              ex = (NF-3>0 ? $(NF-3) : "-")
-              st = (NF-2>0 ? $(NF-2) : "-")
-              br = (NF-1>0 ? $(NF-1) : "-")
-              status = (NF>0 ? $NF : "-")
-
-              # Emoji: ✅ for NORMAL or 100%, ❌ otherwise
-              icon="❌"
-              if(status ~ /NORMAL|100%/) icon="✅"
-
-              printf "| %s | %s | %s | %s | %s | %s | %s |\n", module, icon, bt, tc, ex, st, br
-          }' full_status.txt >> comment.md
-
-          # Save the comment in an env variable for the action
-          echo "PR_COMMENT<<EOF" >> $GITHUB_ENV
-          cat comment.md >> $GITHUB_ENV
+          # Save table in env to post as PR comment
+          echo "md_table<<EOF" >> $GITHUB_ENV
+          cat table.md >> $GITHUB_ENV
           echo "EOF" >> $GITHUB_ENV
 
-      - name: Post PR Comment
+      - name: Post Pretty PR Comment
         if: github.event_name == 'pull_request'
         uses: peter-evans/create-or-update-comment@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           issue-number: ${{ github.event.pull_request.number }}
-          body: ${{ env.PR_COMMENT }}
+          body: ${{ env.md_table }}
