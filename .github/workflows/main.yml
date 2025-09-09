@@ -1,8 +1,15 @@
-name: Test and Show HTML Report in Logs
+name: Test and Post Pretty HTML Report in PR
 
 on:
+  pull_request:
+    branches: [ main ]
   push:
     branches: [ main ]
+
+permissions:
+  contents: read
+  checks: write
+  pull-requests: write
 
 jobs:
   test:
@@ -12,15 +19,28 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      # - name: Convert HTML to text and display in log
-      #   run: |
-      #     sudo apt-get update && sudo apt-get install -y w3m
-      #     echo "========== Test Report =========="
-      #     w3m -dump ./full_status.html
+      # Optional: clean up the HTML if needed
+      - name: Extract only the table section
+        run: |
+          # If full_status.html already has just the report, you can skip this step
+          # Otherwise, extract only the <table>...</table> part
+          sed -n '/<table/,/<\/table>/p' full_status.html > report_table.html
 
-      - name: HTML Preview
-        id: html_preview
-        uses: pavi2410/html-preview-action@v4
+      - name: Prepare HTML for PR comment
+        run: |
+          echo "## 🧪 Test Report" > comment.md
+          echo "<details><summary>Show Report</summary>" >> comment.md
+          cat report_table.html >> comment.md
+          echo "</details>" >> comment.md
+
+          echo "PR_COMMENT<<EOF" >> $GITHUB_ENV
+          cat comment.md >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+
+      - name: Post Pretty PR Comment
+        if: github.event_name == 'pull_request'
+        uses: peter-evans/create-or-update-comment@v4
         with:
-          html_file: './full_status.html'
-          job_summary: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+          issue-number: ${{ github.event.pull_request.number }}
+          body: ${{ env.PR_COMMENT }}
